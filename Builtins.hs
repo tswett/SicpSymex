@@ -12,8 +12,43 @@ module Builtins where
 -- more details.
 
 import Data.Char (isNumber)
+import qualified Data.Map as Map
 
 import Symex
+
+evalBuiltin :: Symex -> Symex -> Symex
+evalBuiltin (SAtom name) (SList arguments) = (builtinMap Map.! name) arguments
+evalBuiltin (SList _) _ = error "eval-builtin: operator isn't an atom"
+evalBuiltin _ (SAtom _) = error "eval-builtin: argument list isn't a list"
+
+builtinMap :: Map.Map String ([Symex] -> Symex)
+builtinMap =
+    Map.fromList [
+        ("number?", wrap1 numberP),
+        ("data-atom?", wrap1 dataAtomP),
+        ("null?", wrap1 nullP),
+        ("list?", wrap1 listP),
+        ("if", wrap3 if_),
+        ("and", wrap2 and_),
+        ("or", wrap2 or_),
+        ("not", wrap1 not_),
+        ("list", SList),
+        ("cons", wrap2 cons),
+        ("head", wrap1 head_),
+        ("tail", wrap1 tail_)
+    ]
+
+wrap1 :: (Symex -> Symex) -> [Symex] -> Symex
+wrap1 f [arg1] = f arg1
+wrap1 _ _ = error "wrong number of arguments"
+
+wrap2 :: (Symex -> Symex -> Symex) -> [Symex] -> Symex
+wrap2 f [arg1, arg2] = f arg1 arg2
+wrap2 _ _ = error "wrong number of arguments"
+
+wrap3 :: (Symex -> Symex -> Symex -> Symex) -> [Symex] -> Symex
+wrap3 f [arg1, arg2, arg3] = f arg1 arg2 arg3
+wrap3 _ _ = error "wrong number of arguments"
 
 numberP :: Symex -> Symex
 numberP (SAtom str) = boolToSymex (all isNumber str)
@@ -26,6 +61,26 @@ dataAtomP _ = false
 nullP :: Symex -> Symex
 nullP (SList []) = true
 nullP _ = false
+
+listP :: Symex -> Symex
+listP (SList _) = true
+listP _ = false
+
+if_ :: Symex -> Symex -> Symex -> Symex
+if_ condition ifTrue ifFalse = if condition == true then ifTrue else ifFalse
+
+and_ :: Symex -> Symex -> Symex
+and_ x y = if_ x y x
+
+or_ :: Symex -> Symex -> Symex
+or_ x y = if_ x x y
+
+not_ :: Symex -> Symex
+not_ x = if_ x false true
+
+cons :: Symex -> Symex -> Symex
+cons h (SList t) = SList (h:t)
+cons _ _ = error "cons: tail isn't a list"
 
 head_ :: Symex -> Symex
 head_ (SList (x:xs)) = x
