@@ -37,8 +37,13 @@ builtinMap =
         ("list", SList),
         ("cons", wrap2 cons),
         ("head", wrap1 head_),
-        ("tail", wrap1 tail_)
+        ("tail", wrap1 tail_),
+        ("builtin-names", wrap0 builtinNames)
     ]
+
+wrap0 :: Symex -> [Symex] -> Symex
+wrap0 f [] = f
+wrap0 _ _ = error "wrong number of arguments"
 
 wrap1 :: (Symex -> Symex) -> [Symex] -> Symex
 wrap1 f [arg1] = f arg1
@@ -100,6 +105,9 @@ tail_ :: Symex -> Symex
 tail_ (SList (x:xs)) = SList xs
 tail_ (SList []) = error "tail: expected non-empty list, found empty list"
 tail_ (SAtom _) = error "tail: expected non-empty list, found atom"
+
+builtinNames :: Symex
+builtinNames = SList (map SAtom (Map.keys builtinMap))
 
 boolToSymex :: Bool -> Symex
 boolToSymex True = true

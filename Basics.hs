@@ -12,12 +12,13 @@ module Basics where
 -- more details.
 
 import Builtins (
-    and_, applyBuiltin, atomP, cons, dataAtomP, eqP,
+    and_, applyBuiltin, atomP, builtinNames, cons, dataAtomP, eqP,
     head_, if_, listP, not_, nullP, tail_)
-import Symex (Symex(SList))
+import qualified Data.Map as Map
+import Symex (Symex(SAtom, SList))
 
 eval :: Symex -> Symex
-eval expr = evalIn (SList []) expr 
+eval expr = evalIn defaultEnvironment expr
 
 evalIn :: Symex -> Symex -> Symex
 evalIn env expr =
@@ -26,8 +27,26 @@ evalIn env expr =
     if_ (variableP expr)
         (lookupVariableValue expr env) .
     if_ (isApplicationP expr)
-        (applyBuiltin (operator expr) (evalEachIn env (operands expr))) $
+        (apply (evalIn env (operator expr)) (evalEachIn env (operands expr))) $
     error "eval: couldn't recognize this expression"
+
+apply :: Symex -> Symex -> Symex
+apply func args =
+    if_ (primitiveProcedureP func)
+        (applyPrimitiveProcedure func args) $
+    error "apply: couldn't recognize this function"
+
+defaultEnvironment :: Symex
+defaultEnvironment = map_ makePrimitive builtinNames
+
+map_ :: (Symex -> Symex) -> Symex -> Symex
+map_ func list =
+    if_ (nullP list)
+        (SList [])
+        (cons (func (head_ list)) (map_ func (tail_ list)))
+
+makePrimitive :: Symex -> Symex
+makePrimitive name = SList [name, SList [SAtom ":primitive", name]]
 
 selfEvaluatingP :: Symex -> Symex
 selfEvaluatingP = dataAtomP
@@ -41,7 +60,7 @@ lookupVariableValue name env =
         (error "lookup-variable-value: couldn't find the variable")
         (let assignment = head_ env in
             if_ (eqP (head_ assignment) name)
-                (tail_ assignment)
+                (head_ (tail_ assignment))
                 (lookupVariableValue name (tail_ env)))
 
 isApplicationP :: Symex -> Symex
@@ -58,3 +77,9 @@ evalEachIn env exprs =
     if_ (nullP exprs)
         (SList [])
         (cons (evalIn env (head_ exprs)) (evalEachIn env (tail_ exprs)))
+
+primitiveProcedureP :: Symex -> Symex
+primitiveProcedureP func = and_ (listP func) (eqP (head_ func) (SAtom ":primitive"))
+
+applyPrimitiveProcedure :: Symex -> Symex -> Symex
+applyPrimitiveProcedure func args = applyBuiltin (head_ (tail_ func)) args
