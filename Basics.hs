@@ -12,7 +12,8 @@ module Basics where
 -- more details.
 
 import Builtins (
-    and_, cons, dataAtomP, evalBuiltin, head_, if_, listP, not_, nullP, tail_)
+    and_, applyBuiltin, atomP, cons, dataAtomP, eqP,
+    head_, if_, listP, not_, nullP, tail_)
 import Symex (Symex(SList))
 
 eval :: Symex -> Symex
@@ -22,12 +23,26 @@ evalIn :: Symex -> Symex -> Symex
 evalIn env expr =
     if_ (selfEvaluatingP expr)
         expr .
+    if_ (variableP expr)
+        (lookupVariableValue expr env) .
     if_ (isApplicationP expr)
-        (evalBuiltin (operator expr) (evalEachIn env (operands expr))) $
+        (applyBuiltin (operator expr) (evalEachIn env (operands expr))) $
     error "eval: couldn't recognize this expression"
 
 selfEvaluatingP :: Symex -> Symex
 selfEvaluatingP = dataAtomP
+
+variableP :: Symex -> Symex
+variableP = atomP
+
+lookupVariableValue :: Symex -> Symex -> Symex
+lookupVariableValue name env =
+    if_ (nullP env)
+        (error "lookup-variable-value: couldn't find the variable")
+        (let assignment = head_ env in
+            if_ (eqP (head_ assignment) name)
+                (tail_ assignment)
+                (lookupVariableValue name (tail_ env)))
 
 isApplicationP :: Symex -> Symex
 isApplicationP expr = and_ (listP expr) (not_ (nullP expr))

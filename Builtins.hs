@@ -16,14 +16,15 @@ import qualified Data.Map as Map
 
 import Symex
 
-evalBuiltin :: Symex -> Symex -> Symex
-evalBuiltin (SAtom name) (SList arguments) = (builtinMap Map.! name) arguments
-evalBuiltin (SList _) _ = error "eval-builtin: operator isn't an atom"
-evalBuiltin _ (SAtom _) = error "eval-builtin: argument list isn't a list"
+applyBuiltin :: Symex -> Symex -> Symex
+applyBuiltin (SAtom name) (SList arguments) = (builtinMap Map.! name) arguments
+applyBuiltin (SList _) _ = error "apply-builtin: operator isn't an atom"
+applyBuiltin _ (SAtom _) = error "apply-builtin: argument list isn't a list"
 
 builtinMap :: Map.Map String ([Symex] -> Symex)
 builtinMap =
     Map.fromList [
+        ("atom?", wrap1 atomP),
         ("number?", wrap1 numberP),
         ("data-atom?", wrap1 dataAtomP),
         ("null?", wrap1 nullP),
@@ -32,6 +33,7 @@ builtinMap =
         ("and", wrap2 and_),
         ("or", wrap2 or_),
         ("not", wrap1 not_),
+        ("eq?", wrap2 eqP),
         ("list", SList),
         ("cons", wrap2 cons),
         ("head", wrap1 head_),
@@ -49,6 +51,10 @@ wrap2 _ _ = error "wrong number of arguments"
 wrap3 :: (Symex -> Symex -> Symex -> Symex) -> [Symex] -> Symex
 wrap3 f [arg1, arg2, arg3] = f arg1 arg2 arg3
 wrap3 _ _ = error "wrong number of arguments"
+
+atomP :: Symex -> Symex
+atomP (SAtom _) = true
+atomP _ = false
 
 numberP :: Symex -> Symex
 numberP (SAtom str) = boolToSymex (all isNumber str)
@@ -77,6 +83,9 @@ or_ x y = if_ x x y
 
 not_ :: Symex -> Symex
 not_ x = if_ x false true
+
+eqP :: Symex -> Symex -> Symex
+eqP x y = boolToSymex (x == y)
 
 cons :: Symex -> Symex -> Symex
 cons h (SList t) = SList (h:t)
