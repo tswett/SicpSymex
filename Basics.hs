@@ -13,7 +13,7 @@ module Basics where
 
 import Builtins (
     and_, applyBuiltin, atomP, builtinNames, cons, dataAtomP, eqP,
-    head_, if_, listP, not_, nullP, tail_)
+    head_, if_, listP, not_, nullP, second, tail_)
 import qualified Data.Map as Map
 import Symex (Symex(SAtom, SList))
 
@@ -26,7 +26,9 @@ evalIn env expr =
         expr .
     if_ (variableP expr)
         (lookupVariableValue expr env) .
-    if_ (isApplicationP expr)
+    if_ (quotedP expr)
+        (textOfQuotation expr) .
+    if_ (applicationP expr)
         (apply (evalIn env (operator expr)) (evalEachIn env (operands expr))) $
     error "eval: couldn't recognize this expression"
 
@@ -60,11 +62,17 @@ lookupVariableValue name env =
         (error "lookup-variable-value: couldn't find the variable")
         (let assignment = head_ env in
             if_ (eqP (head_ assignment) name)
-                (head_ (tail_ assignment))
+                (second assignment)
                 (lookupVariableValue name (tail_ env)))
 
-isApplicationP :: Symex -> Symex
-isApplicationP expr = and_ (listP expr) (not_ (nullP expr))
+quotedP :: Symex -> Symex
+quotedP expr = and_ (listP expr) (eqP (head_ expr) (SAtom "quote"))
+
+textOfQuotation :: Symex -> Symex
+textOfQuotation = second
+
+applicationP :: Symex -> Symex
+applicationP expr = and_ (listP expr) (not_ (nullP expr))
 
 operator :: Symex -> Symex
 operator = head_

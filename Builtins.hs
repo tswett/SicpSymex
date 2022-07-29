@@ -37,6 +37,7 @@ builtinMap =
         ("list", SList),
         ("cons", wrap2 cons),
         ("head", wrap1 head_),
+        ("second", wrap1 second),
         ("tail", wrap1 tail_),
         ("builtin-names", wrap0 builtinNames)
     ]
@@ -97,9 +98,14 @@ cons h (SList t) = SList (h:t)
 cons _ _ = error "cons: tail isn't a list"
 
 head_ :: Symex -> Symex
-head_ (SList (x:xs)) = x
+head_ (SList (x:_)) = x
 head_ (SList []) = error "head: expected non-empty list, found empty list"
 head_ (SAtom _) = error "head: expected non-empty list, found atom"
+
+second :: Symex -> Symex
+second (SList (_:x:_)) = x
+second (SList _) = error "second: list was too short"
+second (SAtom _) = error "second: expected list, found atom"
 
 tail_ :: Symex -> Symex
 tail_ (SList (x:xs)) = SList xs
