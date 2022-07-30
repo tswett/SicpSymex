@@ -12,10 +12,10 @@ module Basics where
 -- more details.
 
 import Builtins (
-    and_, applyBuiltin, atomP, builtinNames, cons, dataAtomP, eqP,
-    head_, if_, listP, not_, nullP, second, tail_)
+    and_, append, applyBuiltin, atomP, builtinNames, cons, dataAtomP, eqP,
+    head_, if_, listP, not_, nullP, second, tail_, third, zip_)
 import qualified Data.Map as Map
-import Symex (Symex(SAtom, SList))
+import Symex (display, parse, Symex(SAtom, SList))
 
 eval :: Symex -> Symex
 eval expr = evalIn defaultEnvironment expr
@@ -28,6 +28,8 @@ evalIn env expr =
         (lookupVariableValue expr env) .
     if_ (quotedP expr)
         (textOfQuotation expr) .
+    if_ (lambdaP expr)
+        (makeClosure (lambdaParameters expr) (lambdaBody expr) env) .
     if_ (applicationP expr)
         (apply (evalIn env (operator expr)) (evalEachIn env (operands expr))) $
     error "eval: couldn't recognize this expression"
@@ -35,8 +37,14 @@ evalIn env expr =
 apply :: Symex -> Symex -> Symex
 apply func args =
     if_ (primitiveProcedureP func)
-        (applyPrimitiveProcedure func args) $
+        (applyPrimitiveProcedure func args) .
+    if_ (closureP func)
+        (evalIn (extendEnvironment (closureParameters func) args (closureEnvironment func))
+                (closureBody func)) $
     error "apply: couldn't recognize this function"
+
+rep :: String -> String
+rep = display . eval . parse
 
 defaultEnvironment :: Symex
 defaultEnvironment = map_ makePrimitive builtinNames
@@ -66,10 +74,22 @@ lookupVariableValue name env =
                 (lookupVariableValue name (tail_ env)))
 
 quotedP :: Symex -> Symex
-quotedP expr = and_ (listP expr) (eqP (head_ expr) (SAtom "quote"))
+quotedP expr = startsWithP (SAtom "quote") expr
 
 textOfQuotation :: Symex -> Symex
 textOfQuotation = second
+
+lambdaP :: Symex -> Symex
+lambdaP expr = startsWithP (SAtom "lambda") expr
+
+makeClosure :: Symex -> Symex -> Symex -> Symex
+makeClosure params body env = SList [SAtom ":closure", params, body, env]
+
+lambdaParameters :: Symex -> Symex
+lambdaParameters = second
+
+lambdaBody :: Symex -> Symex
+lambdaBody = third
 
 applicationP :: Symex -> Symex
 applicationP expr = and_ (listP expr) (not_ (nullP expr))
@@ -87,7 +107,25 @@ evalEachIn env exprs =
         (cons (evalIn env (head_ exprs)) (evalEachIn env (tail_ exprs)))
 
 primitiveProcedureP :: Symex -> Symex
-primitiveProcedureP func = and_ (listP func) (eqP (head_ func) (SAtom ":primitive"))
+primitiveProcedureP func = startsWithP (SAtom ":primitive") func
 
 applyPrimitiveProcedure :: Symex -> Symex -> Symex
 applyPrimitiveProcedure func args = applyBuiltin (head_ (tail_ func)) args
+
+closureP :: Symex -> Symex
+closureP func = startsWithP (SAtom ":closure") func
+
+extendEnvironment :: Symex -> Symex -> Symex -> Symex
+extendEnvironment newNames newValues oldEnvironment = append [(zip_ [newNames, newValues]), oldEnvironment]
+
+closureParameters :: Symex -> Symex
+closureParameters func = second func
+
+closureEnvironment :: Symex -> Symex
+closureEnvironment func = third (tail_ func)
+
+closureBody :: Symex -> Symex
+closureBody func = third func
+
+startsWithP :: Symex -> Symex -> Symex
+startsWithP tag x = and_ (listP x) (eqP (head_ x) tag)

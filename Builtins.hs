@@ -38,7 +38,10 @@ builtinMap =
         ("cons", wrap2 cons),
         ("head", wrap1 head_),
         ("second", wrap1 second),
+        ("third", wrap1 third),
         ("tail", wrap1 tail_),
+        ("append", append),
+        ("zip", zip_),
         ("builtin-names", wrap0 builtinNames)
     ]
 
@@ -79,7 +82,7 @@ listP (SList _) = true
 listP _ = false
 
 if_ :: Symex -> Symex -> Symex -> Symex
-if_ condition ifTrue ifFalse = if condition == true then ifTrue else ifFalse
+if_ condition ifTrue ifFalse = if symexToBool condition then ifTrue else ifFalse
 
 and_ :: Symex -> Symex -> Symex
 and_ x y = if_ x y x
@@ -107,10 +110,34 @@ second (SList (_:x:_)) = x
 second (SList _) = error "second: list was too short"
 second (SAtom _) = error "second: expected list, found atom"
 
+third :: Symex -> Symex
+third (SList (_:_:x:_)) = x
+third (SList _) = error "third: list was too short"
+third (SAtom _) = error "third: expected list, found atom"
+
 tail_ :: Symex -> Symex
 tail_ (SList (x:xs)) = SList xs
 tail_ (SList []) = error "tail: expected non-empty list, found empty list"
 tail_ (SAtom _) = error "tail: expected non-empty list, found atom"
+
+append :: [Symex] -> Symex
+append x = SList (append' x)
+
+append' :: [Symex] -> [Symex]
+append' (SList x : xs) = x ++ append' xs
+append' (SAtom _ : _) = error "append: expected list, found atom"
+append' [] = []
+
+zip_ :: [Symex] -> Symex
+zip_ x = SList . map SList . zip' . map unwrap $ x
+    where unwrap (SList l) = l
+          unwrap (SAtom _) = error "zip: expected list, found atom"
+
+zip' :: [[Symex]] -> [[Symex]]
+zip' [] = []
+zip' x | all (/= []) x = map head x : zip' (map tail x)
+zip' x | all (== []) x = []
+zip' _ = error "zip: mismatched list lengths"
 
 builtinNames :: Symex
 builtinNames = SList (map SAtom (Map.keys builtinMap))
@@ -118,6 +145,9 @@ builtinNames = SList (map SAtom (Map.keys builtinMap))
 boolToSymex :: Bool -> Symex
 boolToSymex True = true
 boolToSymex False = false
+
+symexToBool :: Symex -> Bool
+symexToBool x = x /= false
 
 true :: Symex
 true = SAtom ":true"
