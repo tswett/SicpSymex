@@ -28,8 +28,12 @@ evalIn env expr =
         (lookupVariableValue expr env) .
     if_ (quotedP expr)
         (textOfQuotation expr) .
+    if_ (withP expr)
+        (evalIn (withEnvironment env expr) (withBody expr)) .
     if_ (lambdaP expr)
         (makeClosure (lambdaParameters expr) (lambdaBody expr) env) .
+    if_ (mrecfnsP expr)
+        (makeRecClosure (mrecfnsName expr) (mrecfnsBody expr) env) .
     if_ (applicationP expr)
         (apply (evalIn env (operator expr)) (evalEachIn env (operands expr))) $
     error "eval: couldn't recognize this expression"
@@ -40,11 +44,16 @@ apply func args =
         (applyPrimitiveProcedure func args) .
     if_ (closureP func)
         (evalIn (extendEnvironment (closureParameters func) args (closureEnvironment func))
-                (closureBody func)) $
+                (closureBody func)) .
+    if_ (recClosureP func)
+        (apply (expandRecClosure func) args) $
     error "apply: couldn't recognize this function"
 
 rep :: String -> String
 rep = display . eval . parse
+
+repIn :: Symex -> String -> String
+repIn env = display . evalIn env . parse
 
 defaultEnvironment :: Symex
 defaultEnvironment = map_ makePrimitive builtinNames
@@ -79,6 +88,15 @@ quotedP expr = startsWithP (SAtom "quote") expr
 textOfQuotation :: Symex -> Symex
 textOfQuotation = second
 
+withP :: Symex -> Symex
+withP expr = startsWithP (SAtom "with") expr
+
+withEnvironment :: Symex -> Symex -> Symex
+withEnvironment env expr = append [evalIn env (second expr), env]
+
+withBody :: Symex -> Symex
+withBody = third
+
 lambdaP :: Symex -> Symex
 lambdaP expr = startsWithP (SAtom "lambda") expr
 
@@ -90,6 +108,33 @@ lambdaParameters = second
 
 lambdaBody :: Symex -> Symex
 lambdaBody = third
+
+mrecfnsName :: Symex -> Symex
+mrecfnsName = second
+
+mrecfnsBody :: Symex -> Symex
+mrecfnsBody = tail_ . tail_
+
+makeRecClosure :: Symex -> Symex -> Symex -> Symex
+makeRecClosure name defs env = SList [SAtom ":recclosure", name, makeFunctionList defs, env]
+
+mrecfnsP :: Symex -> Symex
+mrecfnsP expr = startsWithP (SAtom "mrecfns") expr
+
+makeFunctionList :: Symex -> Symex
+makeFunctionList defs = map_ makeFunction defs
+
+makeFunction :: Symex -> Symex
+makeFunction def = SList [functionName def, functionArgs def, functionBody def]
+
+functionName :: Symex -> Symex
+functionName expr = head_ (head_ expr)
+
+functionArgs :: Symex -> Symex
+functionArgs expr = tail_ (head_ expr)
+
+functionBody :: Symex -> Symex
+functionBody expr = head_ (tail_ expr)
 
 applicationP :: Symex -> Symex
 applicationP expr = and_ (listP expr) (not_ (nullP expr))
@@ -126,6 +171,45 @@ closureEnvironment func = third (tail_ func)
 
 closureBody :: Symex -> Symex
 closureBody func = third func
+
+recClosureP :: Symex -> Symex
+recClosureP func = startsWithP (SAtom ":recclosure") func
+
+expandRecClosure :: Symex -> Symex
+expandRecClosure rc = SList [SAtom ":closure",
+                             recClosureArgs rc,
+                             recClosureName rc,
+                             append [recClosureBindings rc, recClosureEnv rc]]
+
+recClosureName :: Symex -> Symex
+recClosureName = second
+
+recClosureArgs :: Symex -> Symex
+recClosureArgs rc = recDefArgs $ lookupRecDef (recClosureName rc) (recDefs rc)
+
+recClosureBindings :: Symex -> Symex
+recClosureBindings rc = map_ (makeRecClosureBinding rc) (recDefs rc)
+
+recClosureEnv :: Symex -> Symex
+recClosureEnv = third
+
+recDefArgs :: Symex -> Symex
+recDefArgs = second
+
+lookupRecDef :: Symex -> Symex -> Symex
+lookupRecDef name defs = if_ (eqP (head_ (head_ defs)) name)
+                             (head_ defs)
+                             (lookupRecDef name (tail_ defs))
+
+makeRecClosureBinding :: Symex -> Symex -> Symex
+makeRecClosureBinding rc recDef = SList [head_ recDef,
+                                         SList [SAtom ":recclosure",
+                                                head_ recDef,
+                                                third rc,
+                                                third (tail_ rc)]]
+
+recDefs :: Symex -> Symex
+recDefs = third
 
 startsWithP :: Symex -> Symex -> Symex
 startsWithP tag x = and_ (listP x) (eqP (head_ x) tag)
