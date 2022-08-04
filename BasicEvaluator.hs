@@ -16,14 +16,14 @@ import qualified Data.Map as Map
 import BasicEvaluatorTypes (
     Atom(Atom), Binding(Binding), bindingName,
     bindingValue, bindingZip, Closure(Closure),
-    closureEnvironment, closureParameters,
+    closureEnvironment, closureParameters, display,
     Environment(Environment), environmentAppend, environmentHead,
-    environmentTail, fromSymex, nullEnvironmentP,
+    environmentTail, fromSymex, nullEnvironmentP, parse,
     RecClosure(RecClosure), RecClosureDef(RecClosureDef), toSymex)
 import Builtins (
     and_, append, applyBuiltin, atomP, builtinNames, cons, dataAtomP, eqP,
     head_, if_, listP, not_, nullP, second, tail_, third, zip_)
-import Symex (display, parse, Symex(SAtom, SList))
+import Symex (Symex(SAtom, SList))
 
 eval :: Symex -> Symex
 eval expr = evalIn defaultEnvironment expr
@@ -189,7 +189,7 @@ recClosureP func = startsWithP (SAtom ":recclosure") func
 expandRecClosure :: Symex -> Symex
 expandRecClosure rc = SList [SAtom ":closure",
                              recClosureArgs rc,
-                             recClosureName rc,
+                             recClosureBody rc,
                              append [recClosureBindings rc, recClosureEnv rc]]
 
 recClosureName :: Symex -> Symex
@@ -198,11 +198,14 @@ recClosureName = second
 recClosureArgs :: Symex -> Symex
 recClosureArgs rc = recDefArgs $ lookupRecDef (recClosureName rc) (recDefs rc)
 
+recClosureBody :: Symex -> Symex
+recClosureBody rc = third (lookupRecDef (recClosureName rc) (recDefs rc))
+
 recClosureBindings :: Symex -> Symex
 recClosureBindings rc = map_ (makeRecClosureBinding rc) (recDefs rc)
 
 recClosureEnv :: Symex -> Symex
-recClosureEnv = third
+recClosureEnv = third . tail_
 
 recDefArgs :: Symex -> Symex
 recDefArgs = second

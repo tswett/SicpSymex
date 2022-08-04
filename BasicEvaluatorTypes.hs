@@ -13,10 +13,19 @@ module BasicEvaluatorTypes where
 
 import Builtins (boolToSymex, symexToBool)
 import Symex (Symex(SAtom, SList))
+import qualified Symex
 
 class SymexType a where
     toSymex :: a -> Symex
     fromSymex :: Symex -> a
+
+
+
+parse :: SymexType a => String -> a
+parse x = fromSymex (Symex.parse x)
+
+display :: SymexType a => a -> String
+display x = Symex.display (toSymex x)
 
 
 
